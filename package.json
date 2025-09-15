@@ -4,16 +4,24 @@
   "type": "module",
   "scripts": {
     "start": "bun src/index.ts",
-    "run-docker": "docker-compose up -d --build"
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test",
+    "test:db": "bun test-db-connection.js",
+    "start:db": "bun start-db.js",
+    "run-docker": "docker compose up -d --build",
+    "run-docker:db": "docker compose up -d db"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/pg": "^8.11.8"
+    "@types/pg": "^8.11.8",
+    "@types/node": "^20.0.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "crypto": "^1.0.1",
+    "dotenv": "^17.2.2",
     "fastify": "^4.28.1",
     "pg": "^8.12.0"
   }

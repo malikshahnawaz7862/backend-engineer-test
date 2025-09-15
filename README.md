@@ -1,70 +1,211 @@
-# EMURGO Backend Engineer Challenge
+# Blockchain Indexer API
 
-This challenge is designed to evaluate your skills with data processing and API development. You will be responsible for creating an indexer that will keep track of the balance of each address in a blockchain.
+A blockchain indexer that tracks address balances using the UTXO (Unspent Transaction Output) model. This project implements a REST API to process blocks, validate transactions, and maintain address balances.
 
-Please read all instructions bellow carefully.
+## Features
 
-## Instructions
-Fork this repository and make the necessary changes to complete the challenge. Once you are done, simply send your repository link to us and we will review it.
+- **Block Processing**: Accept and validate blockchain blocks with comprehensive validation
+- **Balance Tracking**: Maintain real-time balances for all addresses using UTXO model
+- **Rollback Support**: Rollback blockchain state to any previous height (up to 2000 blocks)
+- **Transaction Validation**: Validate block height, input/output balance, and block ID integrity
+- **Database Persistence**: PostgreSQL database for reliable data storage
+
+## API Endpoints
+
+### POST /blocks
+Add a new block to the blockchain indexer.
+
+**Request Body:**
+```json
+{
+  "id": "block_hash",
+  "height": 1,
+  "transactions": [
+    {
+      "id": "tx1",
+      "inputs": [
+        {
+          "txId": "previous_tx_id",
+          "index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "address": "addr1",
+          "value": 10
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Validations:**
+- Block height must be exactly one unit higher than current height
+- Sum of input values must equal sum of output values for each transaction
+- Block ID must be SHA256 hash of (height + sorted transaction IDs)
+
+### GET /balance/:address
+Get the current balance of a specific address.
+
+**Response:**
+```json
+{
+  "address": "addr1",
+  "balance": 10
+}
+```
+
+### POST /rollback?height=number
+Rollback the blockchain state to a specified height.
+
+**Query Parameters:**
+- `height`: Target height to rollback to (must be ≤ current height and within 2000 blocks)
+
+**Response:**
+```json
+{
+  "message": "Successfully rolled back to height 2",
+  "previousHeight": 3,
+  "newHeight": 2
+}
+```
+
+### GET /status
+Get current blockchain status and all address balances.
+
+**Response:**
+```json
+{
+  "currentHeight": 3,
+  "totalAddresses": 6,
+  "balances": [
+    { "address": "addr1", "balance": 0 },
+    { "address": "addr2", "balance": 4 },
+    { "address": "addr3", "balance": 0 },
+    { "address": "addr4", "balance": 2 },
+    { "address": "addr5", "balance": 2 },
+    { "address": "addr6", "balance": 2 }
+  ]
+}
+```
 
 ## Setup
-This coding challenge uses [Bun](https://bun.sh/) as its runtime. If you are unfamiliar with it, you can follow the instructions on the official website to install it - it works pretty much the same as NodeJS, but has a ton of features that make our life easier, like a built-in test engine and TypeScript compiler.
 
-Strictly speaking, because we run this project on Docker, you don't even need to have Bun installed on your machine. You can run the project using the `docker-compose` command, as described below.
+### Prerequisites
+- Docker and Docker Compose
+- Bun (optional, for local development)
 
-The setup for this coding challenge is quite simple. You need to have `docker` and `docker-compose` installed on your machine. If you don't have them installed, you can follow the instructions on the official docker website to install them.
-
-https://docs.docker.com/engine/install/
-https://docs.docker.com/compose/install/
-
-Once you have `docker` and `docker-compose` installed, you can run the following command to start the application:
-
+### Running with Docker
 ```bash
 docker-compose up -d --build
 ```
 
-or using `Bun`
-
+### Running with Bun
 ```bash
+bun install
 bun run-docker
 ```
 
-## The Challenge
-Your job is to create an indexer that will keep track of the current balance for each address. To do that, you will need to implement the following endpoints:
+The API will be available at `http://localhost:3000`
 
-### `POST /blocks`
-This endpoint will receive a JSON object that should match the `Block` type from the following schema:
+## Database Schema
 
-```ts
-Output = {
-  address: string;
-  value: number;
-}
+The application uses PostgreSQL with the following tables:
 
-Input = {
-  txId: string;
-  index: number;
-}
+- **blocks**: Stores block information (id, height, timestamp)
+- **transactions**: Stores transaction information (id, block_id)
+- **inputs**: Stores transaction inputs (transaction_id, tx_id, index)
+- **outputs**: Stores transaction outputs (transaction_id, address, value, index)
+- **address_balances**: Stores current balance for each address
 
-Transaction = {
-  id: string;
-  inputs: Array<Input>
-  outputs: Array<Output>
-}
+## Testing
 
-Block = {
-  id: string;
-  height: number;
-  transactions: Array<Transaction>;
+Run the test suite:
+```bash
+bun test
+```
+
+The tests cover:
+- Database operations and schema
+- Block validation logic
+- Transaction processing
+- Rollback functionality
+- Integration scenarios matching the requirements example
+
+## Example Usage
+
+Here's the example scenario from the requirements:
+
+1. **Block 1**: addr1 receives 10
+```json
+{
+  "height": 1,
+  "transactions": [{
+    "id": "tx1",
+    "inputs": [],
+    "outputs": [{"address": "addr1", "value": 10}]
+  }]
 }
 ```
 
-Based on the received message you should update the balance of each address accordingly. This endpoint should also run the following validations:
-- validate if the `height` is exactly one unit higher than the current height - this also means that the first ever block should have `height = 1`. If it is not, you should return a `400` status code with an appropriate message;
-- validate if the sum of the values of the inputs is exactly equal to the sum of the values of the outputs. If it is not, you should return a `400` status code with an appropriate message;
-- validate if the `id` of the Block correct. For that, the `id` of the block must be the sha256 hash of the sum of its transaction's ids together with its own height. In other words: `sha256(height + transaction1.id + transaction2.id + ... + transactionN.id)`. If it is not, you should return a `400` status code with an appropriate message;
+2. **Block 2**: addr1 spends 10, addr2 gets 4, addr3 gets 6
+```json
+{
+  "height": 2,
+  "transactions": [{
+    "id": "tx2",
+    "inputs": [{"txId": "tx1", "index": 0}],
+    "outputs": [
+      {"address": "addr2", "value": 4},
+      {"address": "addr3", "value": 6}
+    ]
+  }]
+}
+```
 
-#### Understanding the Schema
+3. **Block 3**: addr3 spends 6, addr4, addr5, addr6 each get 2
+```json
+{
+  "height": 3,
+  "transactions": [{
+    "id": "tx3",
+    "inputs": [{"txId": "tx2", "index": 1}],
+    "outputs": [
+      {"address": "addr4", "value": 2},
+      {"address": "addr5", "value": 2},
+      {"address": "addr6", "value": 2}
+    ]
+  }]
+}
+```
+
+4. **Rollback to height 2**: Undoes block 3, restoring addr3's balance to 6
+
+## Architecture
+
+The application follows a clean architecture pattern:
+
+- **Types** (`src/types.ts`): TypeScript interfaces for all data structures
+- **Database Service** (`src/database.ts`): Handles all database operations
+- **Validation Service** (`src/validation.ts`): Implements block and transaction validation
+- **API Routes** (`src/index.ts`): Fastify server with REST endpoints
+- **Tests** (`spec/`): Comprehensive test suite
+
+## Error Handling
+
+The API returns appropriate HTTP status codes:
+- `200`: Success
+- `400`: Validation errors (invalid height, unbalanced transaction, invalid block ID)
+- `500`: Internal server errors
+
+All errors include descriptive messages and error codes for easy debugging.
+
+## Original Challenge Instructions
+
+This challenge is designed to evaluate your skills with data processing and API development. You will be responsible for creating an indexer that will keep track of the balance of each address in a blockchain.
+
+### Understanding the Schema
 If you are familiar with the UTXO model, you will recognize the schema above. If you are not, here is a brief explanation:
 - each transaction is composed of inputs and outputs;
 - each input is a reference to an output of a previous transaction;
@@ -72,77 +213,6 @@ If you are familiar with the UTXO model, you will recognize the schema above. If
 - from the above, it follows that each input **spends** a certain amount of value from its original address;
 - in summary, the balance of an address is the sum of all the values it received minus the sum of all the values it spent;
 
-### `GET /balance/:address`
-This endpoint should return the current balance of the given address. Simple as that.
-
-### `POST /rollback?height=number`
-This endpoint should rollback the state of the indexer to the given height. This means that you should undo all the transactions that were added after the given height and recalculate the balance of each address. You can assume the `height` will **never** be more than 2000 blocks from the current height.
-
-## Example
-Imagine the following sequence of messages:
-```json
-{
-  height: 1,
-  transactions: [{
-    id: "tx1",
-    inputs: [],
-    outputs: [{
-      address: "addr1",
-      value: 10
-    }]
-  }]
-}
-// here we have addr1 with a balance of 10
-
-{
-  height: 2,
-  transactions: [{
-    id: "tx2",
-    inputs: [{
-      txId: "tx1",
-      index: 0
-    }],
-    outputs: [{
-      address: "addr2",
-      value: 4
-    }, {
-      address: "addr3",
-      value: 6
-    }]
-  }]
-}
-// here we have addr1 with a balance of 0, addr2 with a balance of 4 and addr3 with a balance of 6
-
-{
-  height: 3,
-  transactions: [{
-    id: "tx3",
-    inputs: [{
-      txId: "tx2",
-      index: 1
-    }],
-    outputs: [{
-      address: "addr4",
-      value: 2
-    }, {
-      address: "addr5",
-      value: 2
-    }, {
-      address: "addr6",
-      value: 2
-    }]
-  }]
-}
-// here we have addr1 with a balance of 0, addr2 with a balance of 4, addr3 with a balance of 0 and addr4, addr5 and addr6 with a balance of 2
-```
-
-Then, if you receive the request `POST /rollback?height=2`, you should undo the last transaction which will lead to the state where we have addr1 with a balance of 0, addr2 with a balance of 4 and addr3 with a balance of 6.
-
-## Tests
-You should write tests for all the operations described above. Anything you put on the `spec` folder in the format `*.spec.ts` will be run by the test engine.
-
-Here we are evaluating your capacity to understand what should be tested and how. Are you going to create abstractions and mock dependencies? Are you going to test the database layer? Are you going to test the API layer? That's all up to you.
-
-## Further Instructions
+### Further Instructions
 - We expect you to handle errors and edge cases. Understanding what these are and how to handle them is part of the challenge;
 - We provided you with a setup to run the API and a Postgres database together using Docker, as well as some sample code to test the database connection. You can change this setup to use any other database you'd like;
